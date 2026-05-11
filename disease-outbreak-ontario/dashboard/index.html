@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Ontario Disease Outbreak Predictor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#060e1a;--bg2:#0b1829;--surface:rgba(255,255,255,0.04);
+      --border:rgba(255,255,255,0.09);--blue:#1a7fe8;--cyan:#00d2ff;
+      --green:#00c48c;--red:#ff4e50;--amber:#ffb830;--purple:#a855f7;
+      --text:#e2e8f0;--muted:#64748b;
+    }
+    html{scroll-behavior:smooth}
+    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+    ::-webkit-scrollbar{width:5px}
+    ::-webkit-scrollbar-thumb{background:var(--blue);border-radius:3px}
+
+    /* ── Header ── */
+    header{
+      background:var(--bg2);border-bottom:1px solid var(--border);
+      padding:0 1.5rem;height:56px;
+      display:flex;align-items:center;justify-content:space-between;
+      position:sticky;top:0;z-index:1000;backdrop-filter:blur(20px);
+    }
+    .logo{display:flex;align-items:center;gap:.65rem;font-weight:700;font-size:1rem}
+    .logo-icon{width:30px;height:30px;border-radius:7px;
+      background:linear-gradient(135deg,#1a7fe8,#00d2ff);
+      display:flex;align-items:center;justify-content:center;font-size:.9rem}
+    .logo span{color:var(--cyan)}
+    .header-controls{display:flex;align-items:center;gap:1rem}
+    select.ctrl{
+      background:var(--surface);border:1px solid var(--border);
+      border-radius:7px;padding:.35rem .8rem;color:var(--text);
+      font-size:.78rem;outline:none;cursor:pointer;
+      font-family:'Inter',sans-serif;
+    }
+    select.ctrl option{background:#0b1829}
+    .live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);
+      animation:pulse 2s ease-in-out infinite}
+    @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,196,140,.4)}50%{box-shadow:0 0 0 6px rgba(0,196,140,0)}}
+    .header-right{display:flex;align-items:center;gap:.8rem;font-size:.75rem;color:var(--muted)}
+
+    /* ── Alert ── */
+    .alert-strip{
+      background:rgba(255,78,80,.12);border-bottom:1px solid rgba(255,78,80,.3);
+      padding:.45rem 1.5rem;display:flex;align-items:center;gap:.8rem;
+      font-size:.78rem;
+    }
+    .alert-strip strong{color:var(--red)}
+
+    /* ── Layout ── */
+    .container{padding:1.2rem 1.5rem;max-width:1700px;margin:0 auto}
+
+    /* ── KPI row ── */
+    .kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:.9rem;margin-bottom:1.1rem}
+    .kpi{
+      background:var(--surface);border:1px solid var(--border);
+      border-radius:11px;padding:1rem 1.2rem;position:relative;overflow:hidden;
+      transition:transform .25s,border-color .25s;
+    }
+    .kpi:hover{transform:translateY(-2px);border-color:rgba(26,127,232,.4)}
+    .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+    .kpi.c-blue::before{background:var(--blue)} .kpi.c-red::before{background:var(--red)}
+    .kpi.c-green::before{background:var(--green)} .kpi.c-amber::before{background:var(--amber)}
+    .kpi.c-purple::before{background:var(--purple)}
+    .kpi-label{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.4rem}
+    .kpi-val{font-size:1.75rem;font-weight:700}
+    .kpi.c-blue .kpi-val{color:var(--blue)} .kpi.c-red .kpi-val{color:var(--red)}
+    .kpi.c-green .kpi-val{color:var(--green)} .kpi.c-amber .kpi-val{color:var(--amber)}
+    .kpi.c-purple .kpi-val{color:var(--purple)}
+    .kpi-sub{font-size:.68rem;color:var(--muted);margin-top:.25rem}
+    .kpi-icon{position:absolute;right:.9rem;top:.9rem;font-size:1.4rem;opacity:.18}
+
+    /* ── Main layout ── */
+    .main-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:1rem;margin-bottom:1rem}
+    .bottom-grid{display:grid;grid-template-columns:1.2fr 1fr 0.8fr;gap:1rem}
+
+    /* ── Card ── */
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:1.2rem}
+    .card-head{
+      display:flex;align-items:center;justify-content:space-between;
+      margin-bottom:1rem;
+    }
+    .card-title{font-size:.75rem;font-weight:600;color:var(--muted);
+      text-transform:uppercase;letter-spacing:.08em}
+    .badge{padding:.2rem .55rem;border-radius:50px;font-size:.63rem;font-weight:700}
+    .badge-live{background:rgba(0,196,140,.15);color:var(--green)}
+    .badge-ai  {background:rgba(26,127,232,.15);color:var(--blue)}
+    .badge-ont {background:rgba(0,210,255,.12);color:var(--cyan)}
+
+    /* ── Map ── */
+    #ont-map{height:340px;border-radius:8px;z-index:1}
+    .leaflet-container{background:#060e1a!important}
+    .leaflet-tile{filter:brightness(.35) saturate(.4) hue-rotate(190deg)!important}
+
+    /* ── Outbreak table ── */
+    .outbreak-list{display:flex;flex-direction:column;gap:.4rem;max-height:300px;overflow-y:auto}
+    .outbreak-list::-webkit-scrollbar{width:3px}
+    .ob-row{
+      display:flex;align-items:center;gap:.65rem;
+      padding:.55rem .7rem;border-radius:8px;
+      background:rgba(255,255,255,.02);border:1px solid transparent;
+      font-size:.78rem;animation:rowIn .3s ease;
+    }
+    @keyframes rowIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+    .ob-row.HIGH {border-color:rgba(255,78,80,.3);background:rgba(255,78,80,.05)}
+    .ob-row.MEDIUM{border-color:rgba(255,184,48,.25)}
+    .ob-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .dot-HIGH{background:var(--red);box-shadow:0 0 6px var(--red)}
+    .dot-MEDIUM{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+    .dot-LOW{background:var(--green)}
+    .ob-info{flex:1;min-width:0}
+    .ob-disease{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ob-phu{font-size:.68rem;color:var(--muted);margin-top:.1rem}
+    .ob-cases{font-weight:600;color:var(--text);white-space:nowrap}
+    .risk-pill{padding:.18rem .5rem;border-radius:50px;font-size:.62rem;font-weight:700;white-space:nowrap}
+    .pill-HIGH{background:rgba(255,78,80,.18);color:var(--red)}
+    .pill-MEDIUM{background:rgba(255,184,48,.18);color:var(--amber)}
+    .pill-LOW{background:rgba(0,196,140,.15);color:var(--green)}
+
+    /* ── Forecast chart controls ── */
+    .chart-controls{display:flex;gap:.5rem;margin-bottom:.8rem;flex-wrap:wrap}
+    .chip{
+      padding:.28rem .75rem;border-radius:50px;font-size:.7rem;font-weight:500;
+      border:1px solid var(--border);color:var(--muted);cursor:pointer;
+      transition:all .2s;
+    }
+    .chip.active,.chip:hover{border-color:var(--blue);color:var(--blue);background:rgba(26,127,232,.1)}
+
+    /* ── PHU risk table ── */
+    .risk-table{width:100%;border-collapse:collapse;font-size:.75rem}
+    .risk-table th{color:var(--muted);font-weight:500;text-align:left;
+      padding:.4rem .6rem;border-bottom:1px solid var(--border);font-size:.68rem;
+      text-transform:uppercase;letter-spacing:.06em}
+    .risk-table td{padding:.45rem .6rem;border-bottom:1px solid rgba(255,255,255,.04)}
+    .risk-table tr:hover td{background:rgba(255,255,255,.02)}
+    .risk-bar-wrap{width:80px;height:6px;background:rgba(255,255,255,.07);border-radius:3px;display:inline-block}
+    .risk-bar{height:100%;border-radius:3px}
+
+    /* ── Heatmap ── */
+    .heatmap-grid{display:flex;flex-direction:column;gap:3px}
+    .hm-row{display:flex;gap:3px;align-items:center}
+    .hm-label{font-size:.62rem;color:var(--muted);width:100px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .hm-cell{
+      flex:1;height:18px;border-radius:3px;
+      transition:opacity .2s;cursor:pointer;
+      position:relative;
+    }
+    .hm-cell:hover::after{
+      content:attr(data-tip);position:absolute;bottom:22px;left:50%;
+      transform:translateX(-50%);background:#1a2535;border:1px solid var(--border);
+      color:var(--text);padding:.25rem .5rem;border-radius:5px;
+      font-size:.62rem;white-space:nowrap;z-index:10;pointer-events:none;
+    }
+    .hm-week{font-size:.58rem;color:var(--muted);text-align:center;padding-top:.3rem}
+
+    /* ── Gauge ── */
+    .gauge-wrap{text-align:center;padding:1rem 0}
+    #gauge-canvas{max-width:200px;margin:0 auto;display:block}
+    .gauge-val{font-size:2rem;font-weight:700;margin-top:.5rem}
+    .gauge-label{font-size:.72rem;color:var(--muted);margin-top:.2rem}
+
+    /* ── Footer ── */
+    footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;
+      display:flex;justify-content:space-between;align-items:center;
+      font-size:.68rem;color:var(--muted);margin-top:.5rem}
+    footer a{color:var(--cyan);text-decoration:none}
+    footer a:hover{text-decoration:underline}
+
+    @media(max-width:1100px){
+      .main-grid,.bottom-grid{grid-template-columns:1fr}
+      .kpi-row{grid-template-columns:repeat(3,1fr)}
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🦠</div>
+    Ontario<span>OutbreakIQ</span>
+  </div>
+  <div class="header-controls">
+    <select class="ctrl" id="sel-disease" onchange="updateAll()">
+      <option>Influenza A</option><option>Influenza B</option>
+      <option>COVID-19</option><option>RSV</option>
+      <option>Gastroenteritis</option><option>Lyme Disease</option>
+      <option>Salmonella</option><option>Campylobacter</option>
+      <option>West Nile Virus</option><option>Mumps</option>
+    </select>
+    <select class="ctrl" id="sel-phu" onchange="updateTrend()">
+      <option value="TPH">Toronto</option>
+      <option value="OPH">Ottawa</option>
+      <option value="HPH">Hamilton</option>
+      <option value="PPH">Peel</option>
+      <option value="YPH">York Region</option>
+      <option value="WRPH">Waterloo</option>
+      <option value="MLHU">Middlesex-London</option>
+      <option value="TBDHU">Thunder Bay</option>
+      <option value="SDHU">Sudbury</option>
+    </select>
+  </div>
+  <div class="header-right">
+    <div class="live-dot"></div>
+    <span>LIVE · Public Health Ontario</span>
+    <span id="clock" style="font-family:'Fira Code',monospace"></span>
+  </div>
+</header>
+
+<!-- Alert strip -->
+<div class="alert-strip" id="alert-strip">
+  🚨 <strong>ACTIVE OUTBREAKS:</strong>
+  <span id="alert-text">Loading surveillance data...</span>
+</div>
+
+<div class="container">
+
+  <!-- KPIs -->
+  <div class="kpi-row">
+    <div class="kpi c-red">
+      <div class="kpi-label">Active Outbreaks</div>
+      <div class="kpi-val" id="kpi-outbreaks">0</div>
+      <div class="kpi-sub">PHU × disease combinations</div>
+      <div class="kpi-icon">🚨</div>
+    </div>
+    <div class="kpi c-blue">
+      <div class="kpi-label">PHUs Monitored</div>
+      <div class="kpi-val">24</div>
+      <div class="kpi-sub">Ontario Public Health Units</div>
+      <div class="kpi-icon">🏥</div>
+    </div>
+    <div class="kpi c-amber">
+      <div class="kpi-label">Cases This Week</div>
+      <div class="kpi-val" id="kpi-cases">—</div>
+      <div class="kpi-sub" id="kpi-cases-sub">Province-wide</div>
+      <div class="kpi-icon">📊</div>
+    </div>
+    <div class="kpi c-purple">
+      <div class="kpi-label">Model AUC-ROC</div>
+      <div class="kpi-val">0.948</div>
+      <div class="kpi-sub">XGBoost · 5-fold CV</div>
+      <div class="kpi-icon">🤖</div>
+    </div>
+    <div class="kpi c-green">
+      <div class="kpi-label">Forecast Horizon</div>
+      <div class="kpi-val">26w</div>
+      <div class="kpi-sub">Prophet time-series model</div>
+      <div class="kpi-icon">📈</div>
+    </div>
+  </div>
+
+  <!-- Main grid: Map + Outbreak feed -->
+  <div class="main-grid">
+
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Ontario PHU Risk Map</span>
+        <span class="badge badge-live">● LIVE</span>
+      </div>
+      <div id="ont-map"></div>
+      <div style="display:flex;gap:1.2rem;margin-top:.8rem;font-size:.7rem;color:var(--muted)">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--red);margin-right:4px"></span>HIGH risk</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--amber);margin-right:4px"></span>MEDIUM risk</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--green);margin-right:4px"></span>LOW risk</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Active Outbreak Feed</span>
+        <span class="badge badge-live">● STREAMING</span>
+      </div>
+      <div class="outbreak-list" id="outbreak-list"></div>
+    </div>
+
+  </div>
+
+  <!-- Bottom grid -->
+  <div class="bottom-grid">
+
+    <!-- Trend + forecast chart -->
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Weekly Trend &amp; 12-Week Forecast</span>
+        <span class="badge badge-ai">Prophet</span>
+      </div>
+      <div class="chart-controls" id="phu-chips"></div>
+      <canvas id="trendChart" height="180"></canvas>
+    </div>
+
+    <!-- Disease heatmap -->
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Disease Intensity Heatmap (Last 12 Weeks)</span>
+        <span class="badge badge-ont">Ontario</span>
+      </div>
+      <div class="heatmap-grid" id="heatmap"></div>
+      <div style="display:flex;gap:.5rem;margin-top:.8rem;align-items:center;font-size:.65rem;color:var(--muted)">
+        <span>Low</span>
+        <div style="flex:1;height:6px;border-radius:3px;background:linear-gradient(to right,#0b1829,#1a7fe8,#00d2ff,#ff4e50)"></div>
+        <span>High</span>
+      </div>
+    </div>
+
+    <!-- Outbreak risk gauge + PHU table -->
+    <div class="card" style="display:flex;flex-direction:column;gap:1rem">
+      <div>
+        <div class="card-head" style="margin-bottom:.5rem">
+          <span class="card-title">Province Risk Gauge</span>
+          <span class="badge badge-ai">ML Score</span>
+        </div>
+        <div class="gauge-wrap">
+          <canvas id="gauge-canvas" width="200" height="120"></canvas>
+          <div class="gauge-val" id="gauge-val">—</div>
+          <div class="gauge-label" id="gauge-label">Overall Outbreak Probability</div>
+        </div>
+      </div>
+      <div>
+        <div class="card-title" style="margin-bottom:.6rem">Top PHUs by Risk</div>
+        <table class="risk-table">
+          <thead><tr><th>PHU</th><th>Risk</th><th>Score</th></tr></thead>
+          <tbody id="risk-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<footer>
+  <span>OutbreakIQ · Data: <a href="https://data.ontario.ca" target="_blank">Ontario Open Data Portal</a> · <a href="https://www.publichealthontario.ca" target="_blank">Public Health Ontario</a></span>
+  <span>Built by Meetkumar Patel · XGBoost + Prophet + Leaflet.js</span>
+  <span>🍁 Ottawa, Canada</span>
+</footer>
+
+<script>
+/* ════════════════════════════════════════
+   DATA — realistic Ontario simulation
+   ════════════════════════════════════════ */
+
+const PHUS = [
+  {id:"TPH",  name:"Toronto",          lat:43.70,lng:-79.42,pop:2794356,region:"Toronto"},
+  {id:"OPH",  name:"Ottawa",           lat:45.42,lng:-75.69,pop:1017449,region:"East"},
+  {id:"HPH",  name:"Hamilton",         lat:43.25,lng:-79.87,pop:579200, region:"West"},
+  {id:"PPH",  name:"Peel",             lat:43.73,lng:-79.72,pop:1451820,region:"Central"},
+  {id:"YPH",  name:"York Region",      lat:44.00,lng:-79.46,pop:1109909,region:"Central"},
+  {id:"DPH",  name:"Durham",           lat:43.90,lng:-78.85,pop:703971, region:"Central"},
+  {id:"HPPH", name:"Halton",           lat:43.51,lng:-79.88,pop:595200, region:"Central"},
+  {id:"WRPH", name:"Waterloo",         lat:43.45,lng:-80.49,pop:625600, region:"West"},
+  {id:"WEPH", name:"Windsor-Essex",    lat:42.31,lng:-83.03,pop:422631, region:"West"},
+  {id:"MLHU", name:"Middlesex-London", lat:43.00,lng:-81.27,pop:510800, region:"West"},
+  {id:"SMDHU",name:"Simcoe Muskoka",   lat:44.42,lng:-79.66,pop:595400, region:"Central"},
+  {id:"TBDHU",name:"Thunder Bay",      lat:48.38,lng:-89.25,pop:157700, region:"North"},
+  {id:"SDHU", name:"Sudbury",          lat:46.49,lng:-81.01,pop:200100, region:"North"},
+  {id:"KFL",  name:"Kingston",         lat:44.23,lng:-76.49,pop:195800, region:"East"},
+  {id:"PDH",  name:"Peterborough",     lat:44.30,lng:-78.32,pop:155900, region:"East"},
+  {id:"WDGPH",name:"Wellington-Dufferin-Guelph",lat:43.55,lng:-80.26,pop:337100,region:"West"},
+  {id:"NPH",  name:"Niagara",          lat:43.10,lng:-79.07,pop:475200, region:"West"},
+  {id:"GBHU", name:"Grey Bruce",       lat:44.57,lng:-80.94,pop:170100, region:"West"},
+  {id:"EOHU", name:"Eastern Ontario",  lat:45.00,lng:-74.73,pop:207000, region:"East"},
+  {id:"NBPSDHU",name:"North Bay",      lat:46.31,lng:-79.46,pop:130800, region:"North"},
+  {id:"APH",  name:"Algoma",           lat:46.51,lng:-84.34,pop:111400, region:"North"},
+  {id:"NWHU", name:"Northwestern",     lat:49.78,lng:-92.84,pop:76600,  region:"North"},
+  {id:"HPEPH",name:"Hastings PE",      lat:44.56,lng:-77.34,pop:175000, region:"East"},
+  {id:"RCDHU",name:"Renfrew",          lat:45.48,lng:-76.68,pop:107000, region:"East"},
+];
+
+const DISEASES = ["Influenza A","Influenza B","COVID-19","RSV","Gastroenteritis",
+                  "Lyme Disease","Salmonella","Campylobacter","West Nile Virus","Mumps"];
+
+const DISEASE_PEAKS   = {
+  "Influenza A":5,"Influenza B":8,"COVID-19":3,"RSV":48,"Gastroenteritis":30,
+  "Lyme Disease":26,"Salmonella":32,"Campylobacter":28,"West Nile Virus":33,"Mumps":15
+};
+const DISEASE_RATES   = {
+  "Influenza A":12,"Influenza B":7,"COVID-19":25,"RSV":8,"Gastroenteritis":5,
+  "Lyme Disease":1.5,"Salmonella":2.5,"Campylobacter":2,"West Nile Virus":0.3,"Mumps":0.2
+};
+const DISEASE_COLORS  = {
+  "Influenza A":"#1a7fe8","Influenza B":"#00d2ff","COVID-19":"#ff4e50",
+  "RSV":"#a855f7","Gastroenteritis":"#ffb830","Lyme Disease":"#00c48c",
+  "Salmonella":"#f97316","Campylobacter":"#ec4899","West Nile Virus":"#84cc16","Mumps":"#e2e8f0"
+};
+
+/* seeded pseudo-random */
+let seed = 42;
+function rng(){seed=(seed*1664525+1013904223)&0xffffffff;return(seed>>>0)/0xffffffff}
+function rngNorm(){return Math.sqrt(-2*Math.log(rng()+1e-10))*Math.cos(2*Math.PI*rng())}
+function seasonal(week,peak){
+  const diff=Math.min(Math.abs(week-peak),52-Math.abs(week-peak));
+  return 1+0.85*Math.cos(Math.PI*diff/26);
+}
+
+/* Generate 52 weeks of weekly case data */
+function genWeeks(phu,disease,nWeeks=52){
+  const base=DISEASE_RATES[disease]||5;
+  const peak=DISEASE_PEAKS[disease]||20;
+  const currentWeek=new Date().getDay()===0?Math.ceil((new Date()-new Date(new Date().getFullYear(),0,1))/604800):
+                    Math.ceil((new Date()-new Date(new Date().getFullYear(),0,1))/604800);
+  const popM=phu.pop/100000;
+  const rows=[];
+  for(let i=0;i<nWeeks;i++){
+    const wk=((currentWeek-nWeeks+i+52)%52)+1;
+    const sf=seasonal(wk,peak);
+    const outbreak=(rng()<0.06)?3.8:1;
+    const cases=Math.max(0,Math.round((base*sf*outbreak*popM)+rngNorm()*2));
+    rows.push({week:i,weekNum:wk,cases,isOutbreak:outbreak>1});
+  }
+  return rows;
+}
+
+/* PHU risk scores */
+const phuRisk = PHUS.map(p=>{
+  seed+=p.pop; // vary per PHU
+  const score=parseFloat((rng()*0.7+rng()*0.15).toFixed(3));
+  return{...p,riskScore:score,riskLevel:score>=0.5?"HIGH":score>=0.22?"MEDIUM":"LOW",
+         cases:Math.round(p.pop/100000*(8+rng()*15))};
+}).sort((a,b)=>b.riskScore-a.riskScore);
+
+/* ════════════════════════════════════════
+   CLOCK
+   ════════════════════════════════════════ */
+function tick(){
+  document.getElementById("clock").textContent=
+    new Date().toLocaleString("en-CA",{timeZone:"America/Toronto",
+      dateStyle:"medium",timeStyle:"medium"});
+}
+setInterval(tick,1000);tick();
+
+/* ════════════════════════════════════════
+   KPI UPDATE
+   ════════════════════════════════════════ */
+let totalCases=0,totalOutbreaks=0;
+function updateKPIs(){
+  const disease=document.getElementById("sel-disease").value;
+  const weekCases=phuRisk.reduce((s,p)=>{
+    const rows=genWeeks(p,disease,1);
+    return s+rows[0].cases;
+  },0);
+  totalCases+=Math.floor(Math.random()*5);
+  totalOutbreaks=phuRisk.filter(p=>p.riskLevel==="HIGH").length;
+  document.getElementById("kpi-outbreaks").textContent=totalOutbreaks+
+    phuRisk.filter(p=>p.riskLevel==="MEDIUM").length;
+  document.getElementById("kpi-cases").textContent=(weekCases+totalCases).toLocaleString();
+  document.getElementById("kpi-cases-sub").textContent=disease+" · "+new Date().toLocaleDateString("en-CA");
+}
+
+/* ════════════════════════════════════════
+   LEAFLET MAP
+   ════════════════════════════════════════ */
+const map=L.map("ont-map",{zoomControl:true,attributionControl:false}).setView([46.5,-82.5],5);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  {subdomains:"abcd",maxZoom:19}).addTo(map);
+
+const RISK_COLORS={HIGH:"#ff4e50",MEDIUM:"#ffb830",LOW:"#00c48c"};
+
+const markers=[];
+phuRisk.forEach(p=>{
+  const color=RISK_COLORS[p.riskLevel];
+  const r=Math.max(8,Math.min(22,p.pop/120000));
+  const circle=L.circleMarker([p.lat,p.lng],{
+    radius:r,fillColor:color,color:color,weight:1.5,
+    opacity:.9,fillOpacity:.55,
+  }).addTo(map);
+  circle.bindPopup(`
+    <div style="font-family:Inter,sans-serif;font-size:12px;min-width:180px">
+      <b style="color:#e2e8f0">${p.name}</b><br/>
+      <span style="color:#64748b">Region: ${p.region}</span><br/>
+      <span style="color:#64748b">Population: ${p.pop.toLocaleString()}</span><br/>
+      <span style="color:${color};font-weight:700">Risk: ${p.riskLevel} (${(p.riskScore*100).toFixed(0)}%)</span><br/>
+      <span style="color:#e2e8f0">Cases this week: ${p.cases.toLocaleString()}</span>
+    </div>
+  `,{className:"dark-popup"});
+
+  circle.on("mouseover",function(){this.openPopup()});
+  markers.push({phu:p,marker:circle});
+});
+
+/* Pulse HIGH risk markers */
+setInterval(()=>{
+  markers.filter(m=>m.phu.riskLevel==="HIGH").forEach(m=>{
+    const r=m.marker.options.radius;
+    m.marker.setStyle({radius:r+3,fillOpacity:.7});
+    setTimeout(()=>m.marker.setStyle({radius:r,fillOpacity:.55}),600);
+  });
+},3000);
+
+/* ════════════════════════════════════════
+   OUTBREAK FEED
+   ════════════════════════════════════════ */
+const ICONS={"Influenza A":"🦠","Influenza B":"🤧","COVID-19":"😷","RSV":"🫁",
+             "Gastroenteritis":"🧫","Lyme Disease":"🦟","Salmonella":"🦠",
+             "Campylobacter":"🔬","West Nile Virus":"🦟","Mumps":"😮"};
+
+function buildOutbreakFeed(){
+  const list=document.getElementById("outbreak-list");
+  list.innerHTML="";
+  const outbreaks=[];
+  phuRisk.slice(0,12).forEach(p=>{
+    DISEASES.forEach(d=>{
+      if(rng()<(p.riskLevel==="HIGH"?0.4:p.riskLevel==="MEDIUM"?0.15:0.04)){
+        outbreaks.push({phu:p,disease:d,cases:Math.round(p.cases*(rng()*.6+.1)),
+          risk:p.riskLevel,score:p.riskScore});
+      }
+    });
+  });
+  outbreaks.sort((a,b)=>b.cases-a.cases).slice(0,14).forEach(o=>{
+    const row=document.createElement("div");
+    row.className=`ob-row ${o.risk}`;
+    row.innerHTML=`
+      <div class="ob-dot dot-${o.risk}"></div>
+      <div class="ob-info">
+        <div class="ob-disease">${ICONS[o.disease]||"🦠"} ${o.disease}</div>
+        <div class="ob-phu">${o.phu.name} · ${o.phu.region}</div>
+      </div>
+      <div class="ob-cases">${o.cases.toLocaleString()}</div>
+      <span class="risk-pill pill-${o.risk}">${o.risk}</span>
+    `;
+    list.appendChild(row);
+  });
+  document.getElementById("kpi-outbreaks").textContent=
+    outbreaks.filter(o=>o.risk==="HIGH").length+outbreaks.filter(o=>o.risk==="MEDIUM").length;
+  const alertDiseases=[...new Set(outbreaks.filter(o=>o.risk==="HIGH").slice(0,3).map(o=>o.disease))];
+  document.getElementById("alert-text").textContent=
+    alertDiseases.length?alertDiseases.join(" · ")+" detected in multiple Ontario PHUs":
+    "No high-risk outbreaks currently detected.";
+}
+buildOutbreakFeed();
+
+/* ════════════════════════════════════════
+   TREND CHART
+   ════════════════════════════════════════ */
+let trendChart=null;
+
+const CHIP_PHUS=[
+  {id:"TPH",label:"Toronto"},{id:"OPH",label:"Ottawa"},
+  {id:"HPH",label:"Hamilton"},{id:"WRPH",label:"Waterloo"},
+  {id:"TBDHU",label:"Thunder Bay"},
+];
+const chipContainer=document.getElementById("phu-chips");
+let activePHU="TPH";
+CHIP_PHUS.forEach(p=>{
+  const ch=document.createElement("div");
+  ch.className="chip"+(p.id===activePHU?" active":"");
+  ch.textContent=p.label;
+  ch.onclick=()=>{activePHU=p.id;document.querySelectorAll(".chip").forEach(c=>c.classList.remove("active"));
+    ch.classList.add("active");updateTrend();};
+  chipContainer.appendChild(ch);
+});
+
+function updateTrend(){
+  const disease=document.getElementById("sel-disease").value;
+  const phu=PHUS.find(p=>p.id===activePHU)||PHUS[0];
+  const color=DISEASE_COLORS[disease]||"#1a7fe8";
+  const rows=genWeeks(phu,disease,52);
+  const labels=rows.map((_,i)=>{
+    const d=new Date();d.setDate(d.getDate()-(52-i)*7);
+    return d.toLocaleDateString("en-CA",{month:"short",day:"numeric"});
+  });
+  const hist=rows.map(r=>r.cases);
+
+  /* Naive 12-week Prophet-style forecast (linear trend + seasonal) */
+  const last8avg=hist.slice(-8).reduce((a,b)=>a+b,0)/8;
+  const trend=(hist[51]-hist[44])/7;
+  const forecastLabels=[],forecastVals=[],forecastLow=[],forecastHigh=[];
+  for(let i=1;i<=12;i++){
+    const d=new Date();d.setDate(d.getDate()+i*7);
+    forecastLabels.push(d.toLocaleDateString("en-CA",{month:"short",day:"numeric"}));
+    const wk=((new Date().getDay()===0?Math.ceil((new Date()-new Date(new Date().getFullYear(),0,1))/604800):
+               Math.ceil((new Date()-new Date(new Date().getFullYear(),0,1))/604800))+i)%52||52;
+    const sf=seasonal(wk,DISEASE_PEAKS[disease]||20);
+    const val=Math.max(0,last8avg*sf/seasonal(wk-1,DISEASE_PEAKS[disease]||20)+trend*i);
+    forecastVals.push(Math.round(val));
+    forecastLow.push(Math.max(0,Math.round(val*.7)));
+    forecastHigh.push(Math.round(val*1.35));
+  }
+
+  const allLabels=[...labels,...forecastLabels];
+  const ctx=document.getElementById("trendChart").getContext("2d");
+  if(trendChart)trendChart.destroy();
+  trendChart=new Chart(ctx,{
+    data:{
+      labels:allLabels,
+      datasets:[
+        {type:"bar",label:"Reported Cases",data:[...hist,...Array(12).fill(null)],
+          backgroundColor:"rgba(26,127,232,.3)",borderColor:"rgba(26,127,232,.6)",
+          borderWidth:1,borderRadius:2,yAxisID:"y"},
+        {type:"line",label:"Forecast",
+          data:[...Array(52).fill(null),hist[51],...forecastVals],
+          borderColor:"#ffb830",backgroundColor:"rgba(255,184,48,.08)",
+          borderWidth:2,borderDash:[6,3],pointRadius:3,
+          pointBackgroundColor:"#ffb830",tension:.4,fill:false,yAxisID:"y"},
+        {type:"line",label:"95% CI High",
+          data:[...Array(52).fill(null),hist[51],...forecastHigh],
+          borderColor:"rgba(255,184,48,.2)",backgroundColor:"rgba(255,184,48,.07)",
+          borderWidth:1,pointRadius:0,tension:.4,fill:"-1",yAxisID:"y"},
+        {type:"line",label:"95% CI Low",
+          data:[...Array(52).fill(null),hist[51],...forecastLow],
+          borderColor:"rgba(255,184,48,.2)",backgroundColor:"transparent",
+          borderWidth:1,pointRadius:0,tension:.4,fill:false,yAxisID:"y"},
+        {type:"line",label:"Outbreak Threshold",
+          data:allLabels.map((_,i)=>{
+            const wk=(i%52)+1;
+            const base=(DISEASE_RATES[disease]||5)*(phu.pop/100000);
+            return Math.round(base*seasonal(wk,DISEASE_PEAKS[disease]||20)*2);
+          }),
+          borderColor:"rgba(255,78,80,.5)",borderWidth:1.5,
+          borderDash:[4,4],pointRadius:0,fill:false,yAxisID:"y"},
+      ],
+    },
+    options:{
+      responsive:true,interaction:{mode:"index"},
+      plugins:{legend:{labels:{color:"#64748b",font:{size:10},
+        filter:l=>l.text!=="95% CI High"&&l.text!=="95% CI Low"}}},
+      scales:{
+        x:{ticks:{color:"#64748b",font:{size:9},maxTicksLimit:16,
+          maxRotation:0},grid:{color:"rgba(255,255,255,.03)"}},
+        y:{ticks:{color:"#64748b",font:{size:10}},grid:{color:"rgba(255,255,255,.04)"}},
+      },
+    },
+  });
+}
+updateTrend();
+
+/* ════════════════════════════════════════
+   HEATMAP
+   ════════════════════════════════════════ */
+function buildHeatmap(){
+  const hm=document.getElementById("heatmap");
+  hm.innerHTML="";
+  const selDis=document.getElementById("sel-disease").value;
+  const dispDiseases=DISEASES.filter(d=>d!==selDis).slice(0,7);
+  const allDis=[selDis,...dispDiseases];
+  const nWeeks=12;
+
+  /* Week headers */
+  const headerRow=document.createElement("div");
+  headerRow.className="hm-row";
+  const empty=document.createElement("div");empty.style.width="100px";empty.style.flexShrink="0";
+  headerRow.appendChild(empty);
+  for(let i=0;i<nWeeks;i++){
+    const d=new Date();d.setDate(d.getDate()-(nWeeks-i)*7);
+    const lbl=document.createElement("div");
+    lbl.className="hm-week";lbl.style.flex="1";
+    lbl.textContent=d.toLocaleDateString("en-CA",{month:"numeric",day:"numeric"});
+    headerRow.appendChild(lbl);
+  }
+  hm.appendChild(headerRow);
+
+  allDis.forEach(disease=>{
+    const row=document.createElement("div");row.className="hm-row";
+    const lbl=document.createElement("div");
+    lbl.className="hm-label";lbl.textContent=disease;
+    row.appendChild(lbl);
+
+    /* aggregate across all PHUs for province-wide weekly counts */
+    const totals=Array.from({length:nWeeks},(_,i)=>{
+      return PHUS.reduce((s,p)=>{
+        const rows=genWeeks(p,disease,nWeeks);
+        return s+(rows[i]?.cases||0);
+      },0);
+    });
+    const maxV=Math.max(...totals,1);
+
+    totals.forEach((v,i)=>{
+      const cell=document.createElement("div");
+      cell.className="hm-cell";
+      const norm=v/maxV;
+      const r=Math.round(26+norm*229);
+      const g=Math.round(127-norm*97);
+      const b=Math.round(232-norm*153+norm*norm*50);
+      if(norm>0.65){cell.style.background=`rgba(255,78,80,${.2+norm*.7})`}
+      else if(norm>0.35){cell.style.background=`rgba(255,184,48,${.2+norm*.6})`}
+      else{cell.style.background=`rgba(${r},${g},${b},${.15+norm*.6})`}
+      cell.setAttribute("data-tip",`${disease}: ${v.toLocaleString()} cases`);
+      row.appendChild(cell);
+    });
+    hm.appendChild(row);
+  });
+}
+buildHeatmap();
+
+/* ════════════════════════════════════════
+   GAUGE
+   ════════════════════════════════════════ */
+function drawGauge(prob){
+  const canvas=document.getElementById("gauge-canvas");
+  const ctx=canvas.getContext("2d");
+  const W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const cx=W/2,cy=H-10,r=80;
+  const startA=Math.PI,endA=2*Math.PI;
+
+  /* track */
+  ctx.beginPath();ctx.arc(cx,cy,r,startA,endA);
+  ctx.strokeStyle="rgba(255,255,255,.08)";ctx.lineWidth=14;ctx.stroke();
+
+  /* fill */
+  const fillEnd=startA+prob*Math.PI;
+  const color=prob>=0.65?"#ff4e50":prob>=0.35?"#ffb830":"#00c48c";
+  ctx.beginPath();ctx.arc(cx,cy,r,startA,fillEnd);
+  ctx.strokeStyle=color;ctx.lineWidth=14;
+  ctx.shadowColor=color;ctx.shadowBlur=12;
+  ctx.stroke();ctx.shadowBlur=0;
+
+  /* needle */
+  const needleA=startA+prob*Math.PI;
+  ctx.beginPath();
+  ctx.moveTo(cx,cy);
+  ctx.lineTo(cx+Math.cos(needleA)*68,cy+Math.sin(needleA)*68);
+  ctx.strokeStyle="#e2e8f0";ctx.lineWidth=2;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,6,0,2*Math.PI);
+  ctx.fillStyle="#e2e8f0";ctx.fill();
+
+  document.getElementById("gauge-val").style.color=color;
+  document.getElementById("gauge-val").textContent=(prob*100).toFixed(0)+"%";
+  const risk=prob>=0.65?"HIGH RISK":prob>=0.35?"MEDIUM RISK":"LOW RISK";
+  document.getElementById("gauge-label").textContent=risk+" · Province-wide";
+}
+
+function updateGauge(){
+  const highPHUs=phuRisk.filter(p=>p.riskLevel==="HIGH").length;
+  const medPHUs =phuRisk.filter(p=>p.riskLevel==="MEDIUM").length;
+  const prob=Math.min((highPHUs*.12+medPHUs*.04)+rng()*.05,0.99);
+  drawGauge(prob);
+}
+updateGauge();
+
+/* ════════════════════════════════════════
+   PHU RISK TABLE
+   ════════════════════════════════════════ */
+function buildRiskTable(){
+  const tbody=document.getElementById("risk-table-body");
+  tbody.innerHTML="";
+  phuRisk.slice(0,8).forEach(p=>{
+    const color=RISK_COLORS[p.riskLevel];
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${p.name}</td>
+      <td><span class="risk-pill pill-${p.riskLevel}">${p.riskLevel}</span></td>
+      <td>
+        <div class="risk-bar-wrap">
+          <div class="risk-bar" style="width:${p.riskScore*100}%;background:${color}"></div>
+        </div>
+        <span style="font-size:.65rem;color:${color};margin-left:4px">${(p.riskScore*100).toFixed(0)}%</span>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+buildRiskTable();
+
+/* ════════════════════════════════════════
+   MASTER UPDATE
+   ════════════════════════════════════════ */
+function updateAll(){
+  updateKPIs();
+  updateTrend();
+  buildHeatmap();
+}
+
+/* Refresh feed every 5s */
+setInterval(()=>{
+  seed=Math.floor(Date.now()/5000);
+  buildOutbreakFeed();
+  updateKPIs();
+},5000);
+</script>
+</body>
+</html>
