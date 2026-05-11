@@ -1,0 +1,37 @@
+Large Language Models and RAG
+
+Large Language Models (LLMs) are AI models trained on massive text datasets that can understand and generate human-like text. Examples include GPT-4, Claude, Llama, and Mistral.
+
+How LLMs Work:
+LLMs are transformer-based models trained with next-token prediction. Given a sequence of words, the model predicts the most likely next word. After training on trillions of tokens, the model develops rich language understanding.
+
+- Tokens: The basic units LLMs process (roughly 4 characters or 0.75 words on average).
+- Context Window: The maximum number of tokens an LLM can process at once.
+- Temperature: Controls randomness of output. Low temperature = deterministic, high = creative.
+- Prompt Engineering: Crafting effective inputs to guide model behavior.
+
+Limitations of LLMs:
+- Knowledge Cutoff: LLMs have a training cutoff and don't know recent events.
+- Hallucinations: LLMs can confidently generate false information.
+- Context Limits: Cannot access information beyond their context window.
+- No Private Data: LLMs don't know about proprietary or company-specific information.
+
+Retrieval-Augmented Generation (RAG):
+RAG solves LLM limitations by connecting the model to an external knowledge base at inference time.
+
+How RAG Works:
+1. Ingestion Phase: Documents are split into chunks, converted to embeddings (vectors), and stored in a vector database.
+2. Retrieval Phase: When a user asks a question, the query is embedded and compared to stored vectors using cosine similarity.
+3. Generation Phase: The most similar document chunks are retrieved and passed as context to the LLM, which generates a grounded answer.
+
+RAG Components:
+- Embeddings: Dense vector representations of text that capture semantic meaning.
+- Vector Database: Stores embeddings for fast similarity search. Examples: ChromaDB, Pinecone, Weaviate, FAISS.
+- Chunking Strategy: How documents are split affects retrieval quality. Common strategies: fixed-size chunks, sentence-based, paragraph-based.
+- Reranking: A second-stage model that re-orders retrieved results for better relevance.
+
+Benefits of RAG:
+- Reduces hallucinations by grounding answers in retrieved facts.
+- Allows LLMs to access up-to-date or private information.
+- More cost-effective than fine-tuning for knowledge updates.
+- Provides source attribution for answers.

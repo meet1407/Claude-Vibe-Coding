@@ -1,0 +1,29 @@
+Deep Learning and Neural Networks
+
+Deep learning is a branch of machine learning that uses multi-layered neural networks to model complex patterns in data. It powers modern AI breakthroughs in vision, language, and speech.
+
+Neural Network Basics:
+A neural network consists of layers of interconnected nodes (neurons). Each connection has a weight, and neurons apply an activation function to their inputs. The network learns by adjusting weights through a process called backpropagation.
+
+- Input Layer: Receives raw data (e.g., pixel values of an image).
+- Hidden Layers: Extract increasingly abstract features from data.
+- Output Layer: Produces the final prediction or classification.
+
+Common Architectures:
+1. Convolutional Neural Networks (CNNs): Designed for image data. Use convolutional filters to detect edges, shapes, and objects. Used in image classification, object detection, and medical imaging.
+
+2. Recurrent Neural Networks (RNNs): Process sequential data like text and time series. Each step considers previous outputs. LSTMs (Long Short-Term Memory) solve the vanishing gradient problem.
+
+3. Transformers: The architecture behind modern LLMs (Large Language Models) like GPT and Claude. Uses self-attention mechanisms to process entire sequences at once. Extremely powerful for NLP tasks.
+
+Training Deep Learning Models:
+- Gradient Descent: Optimization algorithm that updates weights to minimize loss.
+- Learning Rate: Controls how large each weight update step is.
+- Batch Size: Number of samples processed before updating weights.
+- Epochs: Number of complete passes through the training dataset.
+- Dropout: Regularization technique that randomly disables neurons during training to prevent overfitting.
+
+Frameworks:
+- TensorFlow: Google's open-source deep learning framework.
+- PyTorch: Facebook's framework, preferred for research due to dynamic computation graphs.
+- Keras: High-level API built on top of TensorFlow, easy to use for beginners.
